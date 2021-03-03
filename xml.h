@@ -1,86 +1,158 @@
-unsigned int strLen(char* s)
+#include <iostream>
+
+unsigned long strLen(char* s)
 {
-	///Return number of bytes before the first null character
+	///Returns the number of characters before null
 	char* i=s;
 	while(*i)
 		i++;
 	return i-s;
 }
 
-void strCpy(char* s, char* s2, char* s3)
+char* strChr(char* s, char* s2, char c, bool m)
 {
-	///Copies bytes between s2 and s3 into s
-	while(s2<=s3)
+	///Searches address containing c between memory ranges s-s2
+	if(s==0 || s2==0)
+		return 0;
+	int j=s<s2?1:-1;
+	while(j>0?s<=s2:s>=s2)
 	{
-		*s=*s2;
-		s++;
-		s2++;
-	}
-}
-
-char* strChr(char* s, char* s2, char c, int step=1)
-{
-	///Returns first occurence of any char c between s and s2
-	char* i;
-	while(s<=s2)
-	{
-		if(*s==c)
+		if(*s && (*s==c)==m)
 			return s;
-		s+=step;
+		s+=j;
 	}
 	return 0;
 }
 
-struct node
+void strChr2(char* s, char* s2, bool f[256])
 {
-	char *name=0;
-	node *next=0, *previous=0, *children=0;
-}
-
-void add(node* &begin, node* &end, char* value, char* name)
-{
-	///Adds new node at the end of the list
-	unsigned int nn=strLen(name),nv=strLen(value);
-	node* aux=malloc(sizeof(node));
-	aux->name=malloc(nn);
-	strCpy(aux->name,name,name+nn);
-	aux->previous=end;
-
-	if(begin==0 || end==0)
-		begin=end=aux;
-	else
-		end=aux;
-}
-
-void remove(node* &begin, node* &end, node* aux)
-{
-	///Removes node aux from the list
-	if(begin==aux)
-		begin=begin->next;
-	else
+	for(int aux=0;aux<256;aux++)
+		f[aux]=0;
+	if(s==0 || s2==0)
+		return;
+	while(s<=s2)
 	{
-		if(end==aux)
-			end=end->previous;
+		f[(int)*s]=1;
+		s++;
+	}
+}
+
+void strPrint(char* s, char* s2)
+{
+	while(*s && s<=s2)
+	{
+		if(*s!=' ')
+			std::cout << *s;
 		else
+			std::cout << "X";
+		s++;
+	}
+	std::cout << '\n';
+}
+
+struct Node
+{
+	char *name, *value;
+	Node *next=0, *previous=0, *parent=0, *children=0;
+};
+
+Node* xmlParser(char* content)
+{
+	char *i, *i2, *i3, *i4, *i5, *i6, *i7, *i8, *i9;
+	unsigned int n=strLen(content),f2[n]={0};
+	bool f[256];
+	Node aux, *tree=0, *pathBegin=0, *pathEnd=0;
+
+	i3=content;
+	while(i3)
+	{
+		i=i3;
+		i2=strChr(i, content+n, '>', true);
+		i3=strChr(i2, content+n, '<', true);
+		if(i3 && i3<i2)
 		{
-			aux->previous->next=aux->next;
-			aux->next->previous=aux->previous;
+			std::cout << "\"Less than\" character detected inside tag";
+			return 0;
 		}
+
+		i++;
+		i2--;
+
+		///Element name extraction
+		i4=strChr(i, i2, ' ', true);
+		if(i4==0)
+			i4=i2;
+		else
+			i4--;
+		std::cout << "Name: ";
+		strPrint(i,i4);
+
+		std::cout << "Debug: " << i << ' ' << i4 << '\n';
+		if(*i==' ' || *i4=='<')
+		{
+			std::cout << "Name is empty\n";
+			return 0;
+		}
+		
+		strChr2(i, i4, f);
+		if(f[34]==1 || f[39]==1 || f['='])
+		{
+			std::cout << "Name contains invalid characters\n";
+			return 0;
+		}
+
+		///Attribute extraction
+		if(i4!=i2)
+		{	
+			i5=strChr(i4+1, i2, ' ' , false);
+			if(i5 && *i5=='=')
+			{
+				std::cout << "Left extremity attribute lvalue missing\n";
+				return 0;
+			}
+			i5=strChr(i2, i4+1, ' ', false);
+			if(i5 && *i5=='=')
+			{
+				std::cout << "Right extremity attribute rvalue missing\n";
+				return 0;
+			}
+			
+			i5=strChr(i4+1, i2, '=', true);
+			while(i5)
+			{
+				///Attribute lvalue
+				i6=strChr(i5-1, i4+1, ' ', false);
+				i7=strChr(i6, i4+1, ' ', true)+1;
+				strChr2(i7, i6, f);
+				if(f['_']==1 || f[34]==1 || f[39]==1)
+				{
+					std::cout << "Attribute lvalue contains invalid characters\n";
+					return 0;
+				}
+				std::cout << "Attribute lvalue: ";
+				strPrint(i7, i6);
+
+				///Attribute rvalue
+				i8=strChr(i5+1, i2, ' ', false);
+				if(*i8!=34 && *i8!=39)
+				{
+					std::cout << "Attribute rvalue not quoted\n";
+					return 0;
+				}
+				i9=strChr(i8+1, i2, *i8, true);
+				if(i9==0)
+				{
+					std::cout << "Attribute lvalue closing quotes missing\n";
+					return 0;
+				}
+				std::cout << "Attribute rvalue: ";
+				strPrint(i8, i9);
+
+				i5=strChr(i5+1, i2, '=', true);
+			}
+		}
+
 	}
 
-	free(aux->name);
-	free(aux->value);
-	free(aux);
-	aux=0;
 }
 
-node* xmlParser(char* content)
-{
-	char *i,*i2;
-	unsigned int n=strLen(content),enter,leave;
-	node aux,*pathBegin=0, *pathEnd=0, *treeBegin=0;
-
-	i=strChr(
-	while(*content)
-	{
-}
