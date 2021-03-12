@@ -1,0 +1,31 @@
+<> OK 
+<name> OK
+< name> OK
+<name> OK
+<name=> OK
+<name"> OK
+<name'> OK
+data<name> OK
+<name lvalue = "rvalue"> OK
+<name lvalue="rvalue"> OK
+<name lvalue= "rvalue"> OK
+<name lvalue ="rvalue"> OK
+<name lvalue'="rvalue"> OK
+<name lvalue"="rvalue"> OK
+<name lvalue=="rvalue"> OK
+<name lvalue="rv<alue"> OK
+<name lvalue=rvalue> OK
+<name lvalue=rvalue"> OK
+<name lvalue="rvalue> OK
+<name lvalue= > OK
+<name ="rvalue" > OK
+<name lvalue= ="rvalue"> OK
+<name lvalue= rvalue=> OK
+<name lvalue = "rv=alue"> OK
+<name lvalue "=" > OK
+<name lvalue = "rvalue" ="rvalue2"> OK
+<name lvalue=""> OK?
+<name lvalue="rvalue"x > OK
+<name lvalue= = "rvalue"> OK
+<name lvalue = ="rvalue"> OK
+<name lvalue = = "rvalue">
