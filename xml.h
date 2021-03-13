@@ -1,10 +1,8 @@
 void xmlParser(char* data)
 {
 	///Create local scope functions (std99 compliant) via xmlParser dummy class (pseudo namespace)
-	class xmlParser
+	struct xmlParser
 	{
-		public:
-
 		static unsigned int length(char *s)
 		{
 			///Returns number of characters before null
@@ -118,12 +116,12 @@ void xmlParser(char* data)
 		{
 			lvalue=0;
 			equal=0;
-			i9=i10=0;
 
 			xmlParser::word(i5+1, i2-1, i4, i5);
 			while(i4!=0)
 			{
 				i6=xmlParser::find(i4, i5, '=');
+				i9=i10=0;
 
 				if(lvalue==0)
 				{
@@ -217,10 +215,10 @@ void xmlParser(char* data)
 					xmlParser::print(i7, i8);
 					std::cout << "Rvalue: ";
 					xmlParser::print(i9, i10);
-					i9=i10=0;
 				}
 
-				xmlParser::word(i5+1, i2-1, i4, i5);
+				///Advance to next attribute
+				xmlParser::word((i9==0)?i5+1:i10+1, i2-1, i4, i5);
 			}
 
 			if(lvalue==1)
