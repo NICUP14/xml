@@ -1,231 +1,427 @@
-void xmlParser(char* data)
+/// simple xml library written in c
+#include <stdio.h>
+
+/// return address of first matching/non-matching character between adresses begin and end
+char *xmlChr(char *begin, char *end, char c, char m)
 {
-	///Create local scope functions (std99 compliant) via xmlParser dummy class (pseudo namespace)
-	struct xmlParser
+	if(begin == 0 || end == 0)
+		return 0;
+	while(begin <= end)
 	{
-		static unsigned int length(char *s)
-		{
-			///Returns number of characters before null
-			char* i=s;
-			while(*i)
-				i++;
-			return s-i;
-		}
+		if((*begin == c) == m)
+			return begin;
+		begin++;
+	}
+	return 0;
+}
 
-		static char* find(char* s, char* s2, char c)
-		{
-			///Returns first occurence of character c between adress ranges s and s2
-			if(s==0 || s2==0)
-				return 0;
-			while(*s!=0 && s<=s2)
-			{
-				if(*s==c)
-					return s;
-				s++;
-			}
+/// return wheter if characters between adresses begin and end are identical with the ones between adresses begin2 and end2
+char xmlCmp(char *begin, char *end, char *begin2, char *end2)
+{
+	if(begin == 0 || end == 0 || begin2 == 0 || end2 == 0)
+		return 0;
+	while(begin <= end && begin2 <= end2)
+	{
+		if(*begin != *begin2)
 			return 0;
-		}
+		begin++;
+		begin2++;
+	}
+	return (begin - end) == (begin2 - end2);
+}
 
-		static void word(char* s, char* s2, char* &s3, char* &s4)
-		{
-			///Extracts first word between adress ranges s, s2 via iterators
-			if(s==0 || s2==0)
-				return;
-			while(*s!=0 && s<=s2 && *s==' ')
-				s++;
-			if(*s==0 || s>s2)
-			{
-				s3=s4=0;
-				return;
-			}
-			else
-				s3=s;
-			while(*s!=0 && s<=s2 && *s!=' ')
-				s++;
-			s4=(s>s2)?s2:s-1;
-		}
-
-		static void mark(char* s, char* s2, bool *f)
-		{
-			///Marks present characters between adress ranges s, s2
-			for(int aux=0;aux<256;aux++)
-				f[aux]=0;
-			if(s==0 || s2==0)
-				return;
-			while(s<=s2)
-			{
-				f[(int)*s]=1;
-				s++;
-			}
-		}
-
-		static void print(char* s, char* s2)
-		{
-			///Prints all characters between adress ranges s, s2 also making spaces visible (debug)
-			if(s==0 || s2==0)
-				return;
-			while(*s && s<=s2)
-			{
-				if(*s==' ')
-					std::cout << "[space]";
-				else
-					std::cout << *s;
-				s++;
-			}
-			std::cout << '\n';
-		}
-	};
-	
-	bool lvalue, equal, f[256];
-	unsigned int n=xmlParser::length(data);
-	char *i, *i2, *i3, *i4, *i5, *i6, *i7, *i8, *i9, *i10;
-	
-	i3=data;
-	if(*i3!=0 && *i3!='<')
+/// return wheter if characters between begin and end are alphanumeric (a-z + A-Z + 0-9)
+char xmlAlphanum(char *begin, char *end)
+{
+	if(begin == 0 || end == 0)
+		return 1;
+	while(begin <= end)
 	{
-		std::cout << "Invalid characters before xml data\n";
+		if((*begin >= 'a' && *begin <= 'z') == 0 && (*begin >= 'A' && *begin <= 'Z') == 0 && (*begin >= '0' && *begin <= '9') == 0)
+			return 0;
+		begin++;
+	}
+	return 1;
+}
+
+/// unordered list data type used to store current path 
+struct xmlPath
+{
+	char *nameBegin, *nameEnd;
+	struct xmlPath *next, *previous;
+};
+typedef struct xmlPath xmlPath;
+
+/// convert list to string
+char *xmlCnv(xmlPath *pathBegin, unsigned int pathSize)
+{
+	char *path = malloc(pathSize), *pathIterator = path, *nameIterator;
+	while(pathBegin != 0)
+	{
+		*pathIterator = '/';
+		pathIterator++;
+		nameIterator = pathBegin -> nameBegin;
+		for(nameIterator = pathBegin -> nameBegin;nameIterator != pathBegin -> nameEnd;nameIterator++, pathIterator++)
+			*pathIterator = *nameIterator;
+		pathBegin = pathBegin -> next;
+	}
+	return path;
+}
+
+/// push back name to list and modify ends
+void xmlPush(xmlPath **pathBegin, xmlPath **pathEnd, char *nameBegin, char *nameEnd)
+{
+	xmlPath *node = malloc(sizeof(xmlPath));
+	node -> nameBegin = nameBegin;
+	node -> nameEnd = nameEnd;
+	node -> previous = *pathEnd;
+	node -> next = 0;
+	if(*pathBegin == 0 && *pathEnd == 0)
+		*pathBegin = *pathEnd = node;
+	else
+	{
+		(*pathEnd) -> next = node;
+		*pathEnd = node;
+	}
+}
+
+/// pop back name from list and modify ends
+void xmlPop(xmlPath **pathBegin, xmlPath **pathEnd)
+{
+	xmlPath *node = *pathEnd;
+	if(node -> previous)
+		node -> previous -> next = node -> next;
+	if(node -> next)
+		node -> next -> previous = node -> previous;
+	if(*pathBegin == *pathEnd)
+		*pathBegin = *pathEnd = 0;
+	else
+		*pathEnd = (*pathEnd) -> next;
+	free(node);
+}
+
+/// free list and modify ends
+void xmlFree(xmlPath **pathBegin, xmlPath **pathEnd)
+{
+	xmlPath* node;
+	while(*pathBegin != 0)
+	{
+		node = *pathBegin;
+		*pathBegin = (*pathBegin) -> next;
+		free(node);
+	}
+	*pathBegin = *pathEnd = 0;
+}
+
+/// xml map to store hashed elements
+struct xmlMap
+{
+	char *path, *value;
+	struct xmlMap *next;
+};
+typedef struct xmlMap xmlMap;
+
+/// hash parameters
+#define mapPrime 41
+#define mapSize ~(1 << (sizeof(unsigned int) * 8 - 1))
+
+/// hash path using polinomial rolling hash
+unsigned int xmlHash(char *path)
+{
+	unsigned int hash = 0, power = 1, position;
+	while(path != 0)
+	{
+		if(*path == '/')
+			position = 1;
+		else if(*path >= '0' && *path <= '9')
+			position = *path - '0' + 2;
+		else if(*path >= 'a' && *path <= 'z')
+			position = *path - 'a' + 12;
+		else if(*path >= 'A' && *path <= 'Z')
+			position = *path - 'A' + 38;
+		hash = (hash + position * power) % mapSize;
+		power = (power * mapPrime) % mapSize;
+		path++;
+	}
+	return hash;
+}
+
+/// to be implemented
+//char *xmlGet();
+//char *xmlSet();
+//char *xmlOut();
+
+/// exit messages
+#define error "error in \"%.*s\": "
+#define stringDataBegin "invalid string before data"
+#define stringDataEnd "invalid string after data"
+#define missingTagBegin "missing beginning of tag"
+#define missingTagEnd "missing end of tag"
+#define nameEmpty "name is empty"
+#define nameInvalid "name contains invalid characters"
+#define missingAttrAssign "missing attribute assignment operator"
+#define multipleAttrAssign "multiple attribute assignment operators"
+#define missingLvalue "missing left value"
+#define attrTagClose "attributes in closing tag"
+#define lvalueInvalid "left value contains invalid characters"
+#define missingRvalue "missing right value"
+#define missingRvalueBegin "missing beginning of right value"
+#define missingRvalueEnd "missing end of right value"
+#define textTagClose "text in closing tag"
+#define missingTagOpen "missing opening tag"
+#define missingTagClose "missing closing tag"
+#define mismatchTag "mismatch between opening and closing tags"
+
+/// return a unordered map containing hased xml elements
+void xmlIn(char *dataBegin)
+{
+	/// variable section
+	char lvalue = 0, assign = 0, close = 0, text = 0;
+	char *message = 0;
+	char *dataEnd = 0;
+	char *tagBegin = 0, *tagEnd = 0, *tagBegin2 = 0;
+	char *nameBegin = 0, *nameEnd = 0;
+	char *attrBegin = 0, *attrEnd = 0, *attrSpacer = 0;
+	char *lvalueBegin = 0, *lvalueEnd = 0;
+	char *rvalueBegin = 0, *rvalueEnd = 0;
+	char *textBegin = 0, *textEnd = 0;
+	unsigned int pathSize = 0;
+	xmlPath *pathBegin = 0, *pathEnd = 0;
+
+	/// tag loop
+	if(*dataBegin == 0)
 		return;
-	}
-
-	while(i3!=0)
+	dataEnd = dataBegin;
+	while(*dataEnd != 0)
+		dataEnd++;
+	dataEnd--;
+	tagBegin2 = xmlChr(dataBegin, dataEnd, '<', 1);
+	if(tagBegin2 > dataBegin && xmlChr(dataBegin, tagBegin2, ' ', 0) != 0)
 	{
-		///Tag and text splitting
-		i=i3;
-		i2=xmlParser::find(i+1, data+n, '>');
-		i3=xmlParser::find(i2+1, data+n, '<');
-
-		///Name extraction and validation
-		if(i+1==i2 || *(i+1)==' ')
+		/// string before data
+		message = stringDataBegin;
+		goto exit;
+	}
+	while(tagBegin2 != 0)
+	{
+		/// delimit tag
+		tagBegin = tagBegin2;
+		tagEnd = xmlChr(tagBegin + 1, dataEnd, '>', 1);
+		tagBegin2 = xmlChr(tagBegin + 1, dataEnd, '<', 1);
+		if(tagEnd == 0 || (tagBegin2 != 0 && tagBegin2 < tagEnd))
 		{
-			std::cout << "Empty name\n";
-			return;
+			/// missing end of tag
+			message = missingTagEnd;
+			goto exit;
 		}
-		xmlParser::word(i+1, i2-1, i4, i5);
-		xmlParser::mark(i4, i5, f);
-		if(f[(int)'<']==1 || f[(int)'=']==1 || f[(int)'\"']==1 || f[(int)'\'']==1)
+		if(tagBegin2 != 0 && xmlChr(tagEnd + 1, tagBegin2 - 1, '>', 1) != 0)
 		{
-			std::cout << "Invalid characters in name\n";
-			return;
+			/// missing beginning of tag
+			message = missingTagBegin;
+			goto exit;
 		}
 
-		std::cout << "Name: ";
-		xmlParser::print(i4, i5);
-
-		///Tag attribute parser
-		if(i4!=0)
+		/// delimit name
+		nameBegin = xmlChr(tagBegin + 1, tagEnd - 1, ' ' , 0);
+		if(nameBegin == 0 || (nameBegin == nameEnd && *nameBegin == '/'))
 		{
-			lvalue=0;
-			equal=0;
+			/// name is empty
+			message = nameEmpty;
+			goto exit;
+		}
+		if(*nameBegin == '/')
+		{
+			close = 1;
+			nameBegin++;
+		}
+		nameEnd = xmlChr(nameBegin + 1, tagEnd - 1, ' ', 1);
+		if(nameEnd == 0)
+			nameEnd = tagEnd - 1;
+		else
+			nameEnd--;
+		if(xmlAlphanum(nameBegin, nameEnd) == 0)
+		{
+			/// name is invalid
+			message = nameInvalid;
+			goto exit;
+		}
 
-			xmlParser::word(i5+1, i2-1, i4, i5);
-			while(i4!=0)
+		/// validate name
+		if(close == 0)
+			xmlPush(&pathBegin, &pathEnd, nameBegin, nameEnd);
+		else
+		{
+			if(pathBegin == 0 || pathEnd == 0)
 			{
-				i6=xmlParser::find(i4, i5, '=');
-				i9=i10=0;
+				/// missing opening tag
+				message = missingTagOpen;
+				goto exit;
+			}
+			if(xmlCmp(nameBegin, nameEnd, pathEnd -> nameBegin, pathEnd -> nameEnd) == 0)
+			{
+				/// mismatch between tags
+				message = mismatchTag;
+				goto exit;
+			}
+			xmlPop(&pathBegin, &pathEnd);
+		}
+		pathSize += (close == 1 ? 1 : -1) * (nameEnd - nameBegin + 2);
 
-				if(lvalue==0)
+		/// name handler
+		fputs(close == 0 ? "opening name: " : "closing name: ", stdout);
+		//xmlDebug(stdout, nameBegin, nameEnd);
+		fputc('\n', stdout);
+
+		/// attribute loop
+		lvalue = 1;
+		assign = 0;
+		attrBegin = xmlChr(nameEnd + 1, tagEnd - 1, ' ', 0);
+		if(close == 1 && attrBegin != 0)
+		{
+			/// attributes in closing tag
+			message = attrTagClose;
+			goto exit;
+		}
+		while(attrBegin != 0)
+		{
+			/// delimit attributes
+			attrEnd = xmlChr(attrBegin + 1, tagEnd - 1, ' ', 1);
+			if(attrEnd == 0)
+				attrEnd = tagEnd - 1;
+			else
+				attrEnd--;
+			attrSpacer = xmlChr(attrBegin, attrEnd, '=', 1);
+
+			/// lvalue handler
+			if(lvalue == 1)
+			{
+				if(attrBegin == attrSpacer)
 				{
-					///Lvalue parser
-					if(i4==i6)
-					{
-						std::cout << "Missing lvalue\n";
-						return;
-					}
-
-					i7=i4;
-					i8=(i6==0)?i5:i6-1;
-
-					///lvalue validation
-					xmlParser::mark(i7, i8, f);
-					if(f[(int)'<']==1 || f[(int)'=']==1 || f[(int)'\"']==1 || f[(int)'\'']==1)
-					{
-						std::cout << "invalid characters in lvalue\n";
-						return;
-					}
-
-					///Rvalue present after equal fix
-					if(i6!=0 && i6<i5)
-					{
-						i4=i6;
-						goto rvalue;
-					}
-
-					lvalue=1;
-                                        equal=(i5==i6);
+					/// missing left value
+					message = missingLvalue;
+					goto exit;
 				}
+				lvalueBegin = attrBegin;
+				lvalueEnd = attrSpacer == 0 ? attrEnd : attrSpacer - 1;
+				if(xmlAlphanum(lvalueBegin, lvalueEnd) == 0)
+				{
+					/// left value is invalid
+					message = lvalueInvalid;
+					goto exit;
+				}
+				lvalue = 0;
+				assign = attrEnd == attrSpacer;
+
+				/// rvalue clipped to lvalue
+				if(attrSpacer != 0 && attrSpacer < attrEnd)
+				{
+					attrBegin = attrSpacer;
+					goto rvalue;
+				}
+			}
+			/// rvalue handler
+			else
+			{
+				if(attrBegin != attrSpacer && assign == 0)
+				{
+					/// missing attribute assignment operator
+					message = missingAttrAssign;
+					goto exit;
+				}
+				if(attrBegin == attrSpacer && assign == 1)
+				{
+					/// multiple attribute assignment operators
+					message = multipleAttrAssign;
+					goto exit;
+				}
+				if(attrBegin == attrEnd && attrBegin == attrSpacer)
+					assign = 1;
 				else
 				{
-						///Assignment validation
-						if(i6!=i4 && equal==0)
-						{
-							std::cout << "Missing equal\n";
-							return;
-						}
-						else if(i6==i4 && equal==1)
-						{
-							std::cout << "Extra equal\n";
-							return;
-						}
+					if(attrEnd == attrSpacer)
+					{
+						/// missing rvalue
+						message = missingRvalue;
+						goto exit;
+					}
+					rvalue:
+					rvalueBegin = attrSpacer == 0 ? attrBegin : attrSpacer + 1;
+					if(*rvalueBegin != '\"' && *rvalueBegin != '\'')
+					{
+						/// missing beginning of rvalue
+						message = missingRvalueBegin;
+						goto exit;
+					}
+					rvalueEnd = xmlChr(rvalueBegin + 1, tagEnd - 1, *rvalueBegin, 1);
+					if(rvalueEnd == 0 || (rvalueEnd + 1 < tagEnd && *(rvalueEnd + 1) != ' '))
 
-						///Rvalue parser
-						if(i4==i6 && i5==i6)
-							equal=1;
-						else
-						{
-							if(i5==i6)
-                                                	{
-                                                        	std::cout << "Missing rvalue\n";
-                                                        	return;
-                                                	}
-
-                                                	rvalue:
-                                                	///Rvalue delimiter
-                                                	if(i6>i4)
-                                                        	i6=0;
-                                                	i9=(i6==0)?i4:i6+1;
-                                                	if(*i9!='\"' && *i9!='\'')
-                                                	{
-                                                        	std::cout << "Missing rvalue opening quotes\n";
-                                                        	return;
-                                                	}
-                                                	i10=xmlParser::find(i9+1, i2-1, *i9);
-                                                	if(i10==0)
-                                                	{
-                                                        	std::cout << "Missing rvalue closing quotes\n";
-                                                        	return;
-                                                	}
-
-                                                	///Rvalue validator
-                                                	xmlParser::mark(i9, i10, f);
-                                                	if(f[(int)'<']==1 || (i10<i2-1 && *(i10+1)!=' '))
-                                                	{
-                                                        	std::cout << "Invalid characters in rvalue\n";
-                                                        	return;
-                                                	}
-                                                	
-							lvalue=0;
-                                                	equal=0;
-						}
+					{
+						/// missing end of rvalue
+						message = missingRvalueEnd;
+						goto exit;
+					}
+					attrEnd = rvalueEnd;
+					rvalueBegin++;
+					rvalueEnd--;
+					lvalue = 1;
+					assign = 0;
 				}
-
-				///Attribute handler
-				if(i9!=0)
-				{
-					std::cout << "Lvalue: ";
-					xmlParser::print(i7, i8);
-					std::cout << "Rvalue: ";
-					xmlParser::print(i9, i10);
-				}
-
-				///Advance to next attribute
-				xmlParser::word((i9==0)?i5+1:i10+1, i2-1, i4, i5);
 			}
+			attrBegin = xmlChr(attrEnd + 1, tagEnd - 1, ' ', 0);
 
-			if(lvalue==1)
+			/// attribute handler
+			if(lvalue == 1)
 			{
-				std::cout << "Missing rvalue\n";
-				return;
+				fputs("attribute: ", stdout);
+				//xmlDebug(stdout, lvalueBegin, lvalueEnd);
+				fputs(" \"", stdout);
+				//xmlDebug(stdout, rvalueBegin, rvalueEnd);
+				fputs("\"\n", stdout);
 			}
 		}
+		if(lvalue == 0)
+		{
+			/// missing right value
+			message = missingRvalue;
+			goto exit;
+		}
+
+		/// text delimiter
+		textBegin = tagEnd + 1;
+		textEnd = tagBegin2 == 0 ? dataEnd : tagBegin2 - 1;
+		text = xmlChr(textBegin, textEnd, ' ', 0) != 0;
+		if(close == 1 && text == 1)
+		{
+			/// text in closing tag
+			message = textTagClose;
+			goto exit;
+		}
+
+		/// text handler
+		if(text == 1)
+		{
+			fputs("text: \"", stdout);
+			//xmlDebug(stdout, textBegin, textEnd);
+			fputs("\"\n", stdout);
+		}
 	}
+	if(tagEnd + 1 < dataEnd && xmlChr(tagEnd + 1, dataEnd, ' ', 0) != 0)
+	{
+		/// string after data
+		message = stringDataEnd;
+		goto exit;
+	}
+	if(pathBegin != 0 || pathEnd != 0)
+	{
+		/// missing closing tag
+		message = missingTagClose;
+		goto exit;
+	}
+
+	/// exit
+	exit:
+	if(message != 0)
+		fputs(message, stderr);
+	xmlFree(&pathBegin, &pathEnd);
+	return;
 }
